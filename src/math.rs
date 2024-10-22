@@ -4,7 +4,7 @@ use std::{
     ops::{Add, Div, Mul, Rem, Sub},
 };
 
-/// Adds [a] and [b] exactly, returning the result as two 64-bit floats.
+/// Adds `a` and `b` exactly, returning the result as two 64-bit floats.
 pub fn two_sum(a: f64, b: f64) -> (f64, f64) {
     let x = a + b;
     let mut eb = x - a;
@@ -14,7 +14,7 @@ pub fn two_sum(a: f64, b: f64) -> (f64, f64) {
     (x, ea + eb)
 }
 
-/// Splits [a] in two aligned parts.
+/// Splits `a` in two aligned parts.
 pub fn split(a: f64) -> (f64, f64) {
     let c = 134217729.0 * a;
     let abig = c - a;
@@ -22,7 +22,7 @@ pub fn split(a: f64) -> (f64, f64) {
     (ah, a - ah)
 }
 
-/// Multiples [a] and [b] exactly, returning the result as two 64-bit floats.
+/// Multiples `a` and `b` exactly, returning the result as two 64-bit floats.
 /// The first is the approximate product (with some floating point error)
 /// and the second is the error of the product.
 pub fn two_product(a: f64, b: f64) -> (f64, f64) {
@@ -101,7 +101,7 @@ where
     }
 }
 
-/// Returns a pair containing the quotient and the remainder when [num] is divided by [other].
+/// Returns a pair containing the quotient and the remainder when `num` is divided by `other`.
 pub fn divmod<T>(num: T, other: T) -> (T, T)
 where
     T: Rem<Output = T> + Add<Output = T> + Div<Output = T> + PartialOrd + Copy + Zero,

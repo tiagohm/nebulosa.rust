@@ -1,4 +1,8 @@
-use crate::math::{divmod, two_product, two_sum};
+use crate::{
+    angle::{ArcSec, Radians},
+    erfa::{era_sp00, era_tai_ut1, era_tai_utc, era_ut1_utc, era_utc_tai, era_utc_ut1},
+    math::{divmod, two_product, two_sum},
+};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Reference epoch (J2000.0), Julian Date.
@@ -52,6 +56,18 @@ pub struct Time {
     fraction: f64,
 }
 
+#[derive(Default, Clone, Copy)]
+pub struct Utc(Time);
+
+#[derive(Default, Clone, Copy)]
+pub struct Tai(Time);
+
+#[derive(Default, Clone, Copy)]
+pub struct Ut1(Time);
+
+#[derive(Default, Clone, Copy)]
+pub struct Tt(Time);
+
 #[repr(u32)]
 pub enum JulianCalendarCutOff {
     None,
@@ -59,8 +75,28 @@ pub enum JulianCalendarCutOff {
     GregorianStartEngland = 2361222,
 }
 
+trait PolarMotion {
+    fn pm_xy(&self, time: impl Timescale) -> (Radians, Radians);
+
+    fn pm_angles(&self, time: impl Timescale) -> (ArcSec, Radians, Radians) {
+        let sprime = ArcSec::default(); // era_sp00(time.tt().whole(), time.tt().fraction());
+        let (x, y) = self.pm_xy(time);
+        (sprime, x, y)
+    }
+}
+
 trait TimeDelta {
     fn delta(time: &Time) -> f64;
+}
+
+trait Timescale {
+    fn ut1(&self) -> Ut1;
+
+    fn utc(&self) -> Utc;
+
+    fn tai(&self) -> Tai;
+
+    fn tt(&self) -> Tt;
 }
 
 impl Time {
@@ -102,7 +138,122 @@ macro_rules! time {
 
 pub use time;
 
+impl Utc {
+    #[inline(always)]
+    fn whole(&self) -> f64 {
+        self.0.whole
+    }
+
+    #[inline(always)]
+    fn fraction(&self) -> f64 {
+        self.0.fraction
+    }
+
+    #[inline(always)]
+    fn value(&self) -> f64 {
+        self.0.value()
+    }
+}
+
+impl Tai {
+    #[inline(always)]
+    fn whole(&self) -> f64 {
+        self.0.whole
+    }
+
+    #[inline(always)]
+    fn fraction(&self) -> f64 {
+        self.0.fraction
+    }
+
+    #[inline(always)]
+    fn value(&self) -> f64 {
+        self.0.value()
+    }
+}
+
+impl Timescale for Ut1 {
+    #[inline(always)]
+    fn ut1(&self) -> Ut1 {
+        *self
+    }
+
+    fn utc(&self) -> Utc {
+        let (whole, fraction) = era_ut1_utc(self.0.whole, self.0.fraction, 0.0);
+        Utc(Time { whole, fraction })
+    }
+
+    fn tai(&self) -> Tai {
+        self.utc().tai()
+    }
+
+    fn tt(&self) -> Tt {
+        todo!()
+    }
+}
+
+impl Timescale for Utc {
+    fn ut1(&self) -> Ut1 {
+        let (whole, fraction) = era_utc_ut1(self.0.whole, self.0.fraction, 0.0);
+        Ut1(Time { whole, fraction })
+    }
+
+    #[inline(always)]
+    fn utc(&self) -> Utc {
+        *self
+    }
+
+    fn tai(&self) -> Tai {
+        let (whole, fraction) = era_utc_tai(self.0.whole, self.0.fraction);
+        Tai(Time { whole, fraction })
+    }
+
+    fn tt(&self) -> Tt {
+        todo!()
+    }
+}
+
+impl Timescale for Tai {
+    fn ut1(&self) -> Ut1 {
+        self.utc().ut1()
+    }
+
+    fn utc(&self) -> Utc {
+        let (whole, fraction) = era_tai_utc(self.0.whole, self.0.fraction);
+        Utc(Time { whole, fraction })
+    }
+
+    #[inline(always)]
+    fn tai(&self) -> Tai {
+        *self
+    }
+
+    fn tt(&self) -> Tt {
+        todo!()
+    }
+}
+
+impl Timescale for Tt {
+    fn ut1(&self) -> Ut1 {
+        self.utc().ut1()
+    }
+
+    fn utc(&self) -> Utc {
+        self.tai().utc()
+    }
+
+    #[inline(always)]
+    fn tai(&self) -> Tai {
+        todo!()
+    }
+
+    fn tt(&self) -> Tt {
+        *self
+    }
+}
+
 /// Unix seconds from 1970-01-01 00:00:00 UTC, ignoring leap seconds.
+#[inline(always)]
 pub fn time_unix(seconds: f64) -> Time {
     Time::from_epoch(seconds, DAYSEC, 2440588.0, -0.5)
 }
@@ -117,23 +268,24 @@ pub fn now() -> Time {
 }
 
 /// Modified Julian Date time format.
+#[inline(always)]
 pub fn time_mjd(time: f64) -> Time {
     time!(time + MJD0)
 }
 
-/// A [Time] represented as [year], [month] and [day].
+/// A [Time] represented as `year`, `month` and `day`.
 #[inline(always)]
 pub fn time_ymd(year: u32, month: u32, day: u32) -> Time {
     time_ymdhms_cutoff(year, month, day, 0, 0, 0.0, JulianCalendarCutOff::None)
 }
 
-/// A [Time] represented as [year], [month] and [day] with [cutoff].
+/// A [Time] represented as `year`, `month` and `day` with `cutoff`.
 #[inline(always)]
 pub fn time_ymd_cutoff(year: u32, month: u32, day: u32, cutoff: JulianCalendarCutOff) -> Time {
     time_ymdhms_cutoff(year, month, day, 0, 0, 0.0, cutoff)
 }
 
-/// A [Time] represented as [year], [month], [day], [hour], [minute] and [second].
+/// A [Time] represented as `year`, `month`, `day`, `hour`, `minute` and `second`.
 #[inline(always)]
 pub fn time_ymdhms(year: u32, month: u32, day: u32, hour: u32, minute: u32, second: f64) -> Time {
     time_ymdhms_cutoff(
@@ -147,7 +299,7 @@ pub fn time_ymdhms(year: u32, month: u32, day: u32, hour: u32, minute: u32, seco
     )
 }
 
-/// A [Time] represented as [year], [month], [day], [hour], [minute] and [second].
+/// A [Time] represented as `year`, `month`, `day`, `hour`, `minute` and `second`.
 pub fn time_ymdhms_cutoff(
     year: u32,
     month: u32,
@@ -181,16 +333,18 @@ pub fn time_ymdhms_cutoff(
 }
 
 /// Julian epoch year as floating point value like 2000.0.
+#[inline(always)]
 pub fn time_julian_epoch(epoch: f64) -> Time {
     time!(2451545.0 + (epoch - 2000.0) * DAYSPERJY)
 }
 
 /// Besselian epoch year as floating point value like 1950.0.
+#[inline(always)]
 pub fn time_besselian_epoch(epoch: f64) -> Time {
     time!(MJD0 + 15019.81352 + (epoch - 1900.0) * DTY)
 }
 
-/// Returns the sum of [whole] and [fraction] as two 64-bit floats,
+/// Returns the sum of `whole` and `fraction` as two 64-bit floats,
 /// with the latter guaranteed to be within -0.5 and 0.5 (inclusive on
 /// either side, as the integer is rounded to even).
 /// The arithmetic is all done with exact floating point operations so no
@@ -222,7 +376,7 @@ pub fn normalize(whole: f64, fraction: f64, divisor: f64) -> (f64, f64) {
 mod test {
     use super::{
         now, time_besselian_epoch, time_julian_epoch, time_mjd, time_unix, time_ymd, time_ymdhms,
-        J2000,
+        Tai, Timescale, Utc, J2000,
     };
     use assertor::*;
 
@@ -276,5 +430,31 @@ mod test {
     #[test]
     fn besselian_epoch() {
         assert_that!(time_besselian_epoch(1950.0).value()).is_equal_to(2433282.42345905);
+    }
+
+    #[test]
+    fn utc_to_tai() {
+        let time = Utc(time_ymdhms(2022, 1, 1, 12, 0, 0.0));
+        assert_that!(time.whole()).is_equal_to(2459581.0);
+        assert_that!(time.fraction()).is_equal_to(0.0);
+
+        let tai = time.tai();
+        assert_that!(tai.whole()).is_equal_to(2459581.0);
+        assert_that!(tai.fraction())
+            .with_abs_tol(1e-14)
+            .is_approx_equal_to(0.0004282407407407);
+    }
+
+    #[test]
+    fn tai_to_utc() {
+        let time = Tai(time_ymdhms(2022, 1, 1, 12, 0, 0.0));
+        assert_that!(time.whole()).is_equal_to(2459581.0);
+        assert_that!(time.fraction()).is_equal_to(0.0);
+
+        let utc = time.utc();
+        assert_that!(utc.whole()).is_equal_to(2459581.0);
+        assert_that!(utc.fraction())
+            .with_abs_tol(1e-14)
+            .is_approx_equal_to(-0.0004282407407407);
     }
 }
